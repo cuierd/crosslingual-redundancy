@@ -1,0 +1,29 @@
+_target_: src.data.f0_regression_datamodule.F0RegressionDataModule
+# lab_root: /cluster/work/cotterell/gacampa/en2/aligned
+# phoneme_lab_root: /cluster/work/cotterell/gacampa/en2/aligned
+# wav_root: /cluster/work/cotterell/gacampa/en2/wav_files
+train_file: train-clean-100
+val_file: dev-clean
+test_file: test-clean
+dataset_name: CommonVoice_en2
+
+f0_mode: dct
+f0_n_coeffs: 4 
+celex_path: null
+stress_localizer: null
+
+batch_size: 32
+train_val_test_split: null
+
+model_name: ai-forever/mGPT # ai-forever/mGPT, gpt2 or bert-base-{uncased, cased}
+use_fast_tokenizer: False 
+score_first_token: False # only score the first token of a word in loss
+score_last_token: True
+relative_to_prev: False # labels are not absolute but relative to n previous words' avg
+n_prev: 1 # number of previous words to compute the avg 
+relative_to_mean: False 
+word_stats_path: null
+explicit_words_length: False
+
+num_workers: 1
+pin_memory: False

@@ -1,0 +1,39 @@
+name: prosody
+
+channels:
+  - pytorch
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.10.0
+  - pytorch=2.*
+  - torchvision=0.*
+  - pytorch-lightning=2.*
+  - torchmetrics=0.*
+  - hydra-core=1.*
+  - rich=13.*
+  - pre-commit=3.*
+  - pytest=7.*
+  - scikit-learn
+  - nltk
+  - memory_profiler
+  - tensorboard
+  - tensorboardX
+  - pycwt
+  - seaborn
+
+  - pip>=23
+  - pip:
+      - syllables
+      - soundfile
+      - g2p_en
+      - pyphen
+      - tgt
+      - hydra-optuna-sweeper
+      - hydra-colorlog
+      - pyrootutils
+      - transformers
+      - lightning
+      - wandb>=0.12.10
+      - hydra_colorlog

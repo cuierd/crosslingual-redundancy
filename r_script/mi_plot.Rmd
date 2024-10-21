@@ -1,0 +1,331 @@
+---
+title: "mutual information plot"
+output: html_document
+date: "2024-09-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## import libraries
+```{r library, warning=FALSE}
+library(ggplot2)
+library(tidyverse)
+library(dplyr)
+library(colorspace)
+library(lme4)
+library(lmerTest)
+library(MASS)
+library(RColorBrewer)
+```
+
+## read data
+```{r}
+ent_mi <- read.csv("./results/results.csv", header=TRUE) %>%
+  mutate(language = factor(language, levels = c("De", "En", "Fr", "It", "Vi", "Th", "Zh-CN", "Yue", "Ja", "Sv", "Sr", "Kor")))
+
+View(ent_mi)
+```
+
+## Plot MI for each language and each model - bar plot
+```{r}
+mi <- subset(ent_mi, entropy == "Conditional Entropy")
+
+ggplot(mi, aes(x = language, y = MI, fill = model)) +
+  geom_bar(stat = "identity", position = position_dodge(), color = "black", width = 0.7) +
+  geom_text(aes(label = round(MI, 2)), 
+            vjust = 0.5, 
+            position = position_dodge(width = 0.7), 
+            size = 3, 
+            angle = 90, 
+            hjust = -0.2) + 
+  labs(x = "Language", 
+       y = expression(bold("Mutual Information") ~ "(nats)"),
+       fill = "Context types:") + 
+  theme_minimal(base_size = 14) +
+  scale_fill_manual(values = c("mBERT" = "#1b9e77", "mGPT" = "#d95f02"), 
+                    labels = c("mBERT" = "Bidirectional context (mBERT)", "mGPT" = "Past context (mGPT)")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 0.5, face = "bold"),   
+        axis.title = element_text(face = "bold"),                           
+        legend.title = element_text(),                         
+        legend.position = "top") +
+  ylim(0, 4) +
+  # Annotate regions and text
+  annotate("rect", xmin = 0.6, xmax = 4.4, ymin = 0, ymax = 3, 
+           fill = NA, color = "#6a5acd", linetype = "dotted", linewidth = 1) +  
+  annotate("text", x = 2.5, y = 2.5, label = "stress-accent", color = "#6a5acd", size = 4) +
+  annotate("rect", xmin = 4.6, xmax = 8.4, ymin = 0, ymax = 3, 
+           fill = NA, color = "#4682b4", linewidth = 1) +  
+  annotate("text", x = 6.5, y = 2.5, label = "tonal-accent", color = "#4682b4", size = 4) +
+  annotate("rect", xmin = 8.6, xmax = 11.4, ymin = 0, ymax = 4, linetype = "dashed",
+           fill = NA, color = "#ffa07a", linewidth = 1) +  
+  annotate("text", x = 10, y = 3.5, label = "pitch-accent", color = "#ff7f50", size = 4) +  
+  annotate("rect", xmin = 11.5, xmax = 12.5, ymin = 0, ymax = 2.5, 
+           fill = "gray90", alpha = 0.5, linewidth = 0.8) +
+  annotate("text", x = 12, y = 2, label = "other", color = "gray60", size = 4)
+
+# ggsave(filename = paste0("../visualization/mi_lang_type", ".pdf"), width = 6, height = 5, dpi=300)
+```
+
+```{r}
+ggplot(mi, aes(x = language, y = MI, fill = model)) +
+  geom_bar(stat = "identity", position = position_dodge(), color = "black", width = 0.7) +
+    geom_text(aes(label = round(MI, 2)), 
+            vjust = 0.5, 
+            position = position_dodge(width = 0.7), 
+            size = 3, 
+            angle = 90, 
+            hjust = -0.2) + 
+    labs(x = "Language", 
+       y = expression(bold("Mutual Information") ~ "(nats)"), 
+       fill = "Context types:") + 
+  theme_minimal(base_size = 14) + 
+  scale_fill_manual(values = c("mBERT" = "#1b9e77", "mGPT" = "#d95f02"), 
+                    labels = c("mBERT" = "Bidirectional context (mBERT)", "mGPT" = "Past context (mGPT)")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 0.5, face = "bold"),   
+        axis.title = element_text(face = "bold"),                           
+        legend.title = element_text(),                         
+        legend.position = "top",
+        # panel.border = element_rect(color = "black", fill = NA, size = 0.5)
+        ) +
+  ylim(0, 4)
+
+# ggsave(filename = paste0("../visualization/mi_lang", ".pdf"), width = 6, height = 5, dpi=300)
+```
+
+# plot diff.ent and cond.ent as scatter plot
+```{r}
+mbert <- ent_mi %>%
+  filter(model == "mBERT") %>%
+  dplyr::select(-sd, -MI) %>%  # Remove 'sd' and 'MI' columns
+  mutate(type = factor(type) %>%
+           fct_recode("Stress-accent" = "Stress-accent languages",
+                      "Pitch-accent" = "Pitch-accent languages",
+                      "Tonal-accent" = "Tonal-accent languages",
+                      "Other" = "Other languages"),
+         model = factor(model)) %>%
+  pivot_wider(names_from = entropy, values_from = value) %>%
+  rename(diff = `Differential Entropy`, 
+         cond = `Conditional Entropy`)
+  
+
+# View(mbert)
+
+ggplot(mbert, aes(x = diff, y = cond, color = type, shape = type)) +
+  geom_point(size = 3, alpha = 0.8, position = position_jitter(width = 0.05, height = 0.05)) +
+  geom_text(aes(label = language), vjust = 1.5, hjust = 0.5, size = 2.2) +
+  scale_color_manual(values = c("Stress-accent" = "#6a5acd",   # Refined blue
+                                "Pitch-accent" = "#ff7f0e",    # Refined orange
+                                "Tonal-accent" = "#1f77b4",    # Refined green
+                                "Other" = "gray60")) +         # Gray for other languages
+  
+  # Custom shapes for better differentiation
+  scale_shape_manual(values = c("Stress-accent" = 19,  # Filled circle
+                                "Pitch-accent" = 18,   # Filled triangle
+                                "Tonal-accent" = 15,   # Filled square
+                                "Other" = 17)) +       # Filled star
+  # Adjust axis labels with a step of 0.5 for better granularity
+  scale_x_continuous(breaks = seq(floor(min(mbert$diff)), ceiling(max(mbert$diff)), by = 0.5)) +
+  scale_y_continuous(breaks = seq(floor(min(mbert$cond)), ceiling(max(mbert$cond)), by = 0.5)) +
+  labs(x = "Differential Entropy", y = "Conditional Entropy", 
+       title = "MI Comparison by Language (mBERT)") +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 15),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 13, face = "bold"), 
+    legend.position = "right",
+    panel.grid.major = element_line(color = "gray90", size = 0.4),
+    panel.grid.minor = element_line(color = "gray95", size = 0.2),
+    panel.border = element_rect(color = "black", fill = NA, size = 0.5)
+  )
+
+# ggsave(filename = paste0("../visualization/entropy_mbert", ".pdf"), width = 6, height = 5, dpi=300)
+
+```
+
+```{r}
+mgpt <- ent_mi %>%
+  filter(model == "mGPT") %>%
+  dplyr::select(-sd, -MI) %>%  # Remove 'sd' and 'MI' columns
+  mutate(type = factor(type) %>%
+           fct_recode("Stress-accent" = "Stress-accent languages",
+                      "Pitch-accent" = "Pitch-accent languages",
+                      "Tonal-accent" = "Tonal-accent languages",
+                      "Other" = "Other languages"),  # Recode type labels
+         model = factor(model)) %>%
+  pivot_wider(names_from = entropy, values_from = value) %>%
+  rename(diff = `Differential Entropy`, 
+         cond = `Conditional Entropy`)
+  
+
+# View(mgpt)
+
+ggplot(mgpt, aes(x = diff, y = cond, color = type, shape = type)) +
+  geom_point(size = 3, alpha = 0.8, position = position_jitter(width = 0.05, height = 0.05)) +
+  geom_text(aes(label = language), vjust = 1.5, hjust = 0.5, size = 2.2) +
+  scale_color_manual(values = c("Stress-accent" = "#6a5acd",   # Refined blue
+                                "Pitch-accent" = "#ff7f0e",    # Refined orange
+                                "Tonal-accent" = "#1f77b4",    # Refined green
+                                "Other" = "gray60")) +         # Gray for other languages
+  
+  # Custom shapes for better differentiation
+  scale_shape_manual(values = c("Stress-accent" = 19,  # Filled circle
+                                "Pitch-accent" = 18,   # Filled triangle
+                                "Tonal-accent" = 15,   # Filled square
+                                "Other" = 17)) +        # Filled star
+  
+  labs(x = "Differential Entropy", y = "Conditional Entropy", 
+       title = "MI Comparison by Language (mGPT)") +
+  
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 15),  
+    axis.text = element_text(size = 12), 
+    axis.title = element_text(size = 13, face = "bold"), 
+    legend.position = "right",  
+    panel.grid.major = element_line(color = "gray85"), 
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, size = 0.5)
+  )
+# ggsave(filename = paste0("../visualization/entropy_mgpt", ".pdf"), width = 6, height = 5, dpi=300)
+```
+# read data for alignment & mi
+```{r}
+mi_alg_mbert <- read.csv("./results/mi_alignment.csv", header=TRUE) %>% 
+  filter(model == "mbert") %>%
+  rename(prop_mis_0 = prop_mis_orig,
+         language = lang) %>% 
+  mutate(language = factor(language, levels = c("de", "en", "fr", "it", "vi", "th", "zh", "yue", "ja", "sv", "sr", "kor"), labels = c("De", "En", "Fr", "It", "Vi", "Th", "Zh-CN", "Yue", "Ja", "Sv", "Sr", "Kor"))) %>%
+  filter(language != "Sr") %>%
+  pivot_longer(cols = c(prop_mis_0, prop_mis_1, prop_mis_2, prop_mis_3),
+               names_to = "mis_type", values_to = "prop_mis") %>%
+  pivot_longer(cols = c(mi_0, mi_1, mi_2, mi_3),
+               names_to = "mi_type", values_to = "mi_value") %>%
+  filter(gsub("prop_mis_", "", mis_type) == gsub("mi_", "", mi_type))
+
+
+```
+
+```{r}
+color_palette <- brewer.pal(n = min(12, length(unique(mi_alg_mbert$language))), name = "Paired")
+# color_palette <- brewer.pal(n = min(11, length(unique(mi_alg$language))), name = "Spectral")
+
+ggplot(mi_alg_mbert, aes(x = prop_mis, y = mi_value, color = language, group = language)) +
+  geom_line(size = 1) + 
+  geom_point(size = 1.5, shape = 21, fill = "white") +  
+  labs(x = "Proportion of Misalignment", 
+       y = "Estimated Mutual Information (MI)", 
+       title = "Mutual Information vs Misalignment (mBERT)",
+       color = "Language") +  
+  scale_color_manual(values = color_palette) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
+  theme_minimal(base_size = 15) + 
+  theme(legend.position = "right", 
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 15),  
+        axis.text = element_text(size = 12),  
+        axis.title = element_text(size = 13, face = "bold"),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.5))
+# ggsave(filename = paste0("../visualization/mi_misalignment_mbert", ".pdf"), width = 6, height = 5, dpi=300)
+
+```
+
+```{r}
+mi_alg_mgpt <- read.csv("./results/mi_alignment.csv", header=TRUE) %>% 
+  filter(model == "mgpt") %>%
+  rename(prop_mis_0 = prop_mis_orig,
+         language = lang) %>% 
+  mutate(language = factor(language, levels = c("de", "en", "fr", "it", "vi", "th", "zh", "yue", "ja", "sv", "sr", "kor"), labels = c("De", "En", "Fr", "It", "Vi", "Th", "Zh-CN", "Yue", "Ja", "Sv", "Sr", "Kor"))) %>%
+  filter(language != "Sr") %>%
+  pivot_longer(cols = c(prop_mis_0, prop_mis_1, prop_mis_2, prop_mis_3),
+               names_to = "mis_type", values_to = "prop_mis") %>%
+  pivot_longer(cols = c(mi_0, mi_1, mi_2, mi_3),
+               names_to = "mi_type", values_to = "mi_value") %>%
+  filter(gsub("prop_mis_", "", mis_type) == gsub("mi_", "", mi_type))
+```
+
+```{r}
+ggplot(mi_alg_mgpt, aes(x = prop_mis, y = mi_value, color = language, group = language)) +
+  geom_line(size = 1) + 
+  geom_point(size = 1.5, shape = 21, fill = "white") +  
+  labs(x = "Proportion of Misalignment", 
+       y = "Estimated Mutual Information (MI)", 
+       title = "Mutual Information vs Misalignment (mGPT)",
+       color = "Language") +  
+  scale_color_manual(values = color_palette) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
+  theme_minimal(base_size = 15) + 
+  theme(legend.position = "right", 
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 15),  
+        axis.text = element_text(size = 12),  
+        axis.title = element_text(size = 13, face = "bold"),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.5))
+# ggsave(filename = paste0("../visualization/mi_misalignment_mgpt", ".pdf"), width = 6, height = 5, dpi=300)
+
+```
+
+# read in data for token level mi
+```{r}
+mi_token_mbert <- read.csv("./results/mi_token_mbert.csv", header=TRUE) %>% 
+  filter(model == "mbert") %>%
+  rename(token_1 = token_1_prop,
+         token_2 = token_2_prop,
+         token_3 = token_3_prop) %>% 
+  mutate(language = factor(language, levels = c("de", "en", "fr", "it", "vi", "th", "zh", "yue", "ja", "sv", "sr", "kor"), labels = c("De", "En", "Fr", "It", "Vi", "Th", "Zh-CN", "Yue", "Ja", "Sv", "Sr", "Kor"))) %>%
+  filter(language != "Sr") %>%
+  pivot_longer(cols = c(token_1, token_2, token_3),
+               names_to = "token_type", values_to = "prop") %>%
+  pivot_longer(cols = c(loss_token_1, loss_token_2, loss_token_3),
+               names_to = "loss_token_type", values_to = "loss") %>%
+  filter(gsub("token_", "", token_type) == gsub("loss_token_", "", loss_token_type)) %>%
+  dplyr::select(-loss_token_type) %>%
+  mutate(token_type = factor(token_type, levels = c("token_1", "token_2", "token_3"),
+                             labels = c("1", "2", "3+")))
+
+# View(mi_token_mbert)
+
+```
+
+```{r}
+ggplot(mi_token_mbert, aes(x = token_type, y = loss, color = language, group = language)) +
+  geom_line(size = 1) + 
+  geom_point(size = 1.5, shape = 21, fill = "white") +  
+  labs(x = "Number of sub-tokens of a word in test dataset", 
+       y = "Estimated Conditional Entropy", 
+       title = "Conditional Entropy vs Tokenization (mBERT)",
+       color = "Language") +  
+  scale_color_manual(values = color_palette) +
+  # geom_hline(yintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
+  theme_minimal(base_size = 15) + 
+  theme(legend.position = "right", 
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 15),  
+        axis.text = element_text(size = 12),  
+        axis.title = element_text(size = 13, face = "bold"),
+        # panel.border = element_rect(color = "black", fill = NA, size = 0.5)
+        )
+# ggsave(filename = paste0("../visualization/cond_ent_tokenization_mbert", ".pdf"), width = 6, height = 5, dpi=300)
+
+```
+```{r}
+ggplot(mi_token_mbert, aes(x = token_type, y = prop, color = language, group = language)) +
+  geom_line(size = 1) + 
+  geom_point(size = 1.5, shape = 21, fill = "white") +  
+  labs(x = "Number of sub-tokens of a word in test dataset", 
+       y = "Propotion", 
+       title = "Propotion of different tokenization results (mBERT)",
+       color = "Language") +  
+  scale_color_manual(values = color_palette) +
+  # geom_hline(yintercept = 0, linetype = "dashed", color = "black", size = 0.5) +
+  theme_minimal(base_size = 15) + 
+  theme(legend.position = "right", 
+        plot.title = element_text(hjust = 0.5, face = "bold", size = 15),  
+        axis.text = element_text(size = 12),  
+        axis.title = element_text(size = 13, face = "bold"),
+        # panel.border = element_rect(color = "black", fill = NA, size = 0.5)
+        )
+# ggsave(filename = paste0("../visualization/propotion_tokenization_mbert", ".pdf"), width = 6, height = 5, dpi=300)
+```
+
+
+
