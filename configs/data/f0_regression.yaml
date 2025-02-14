@@ -13,7 +13,7 @@ celex_path: null
 stress_localizer: null
 
 batch_size: 32
-train_val_test_split: null
+train_val_test_split: [0.8, 0.1, 0.1]
 
 model_name: ai-forever/mGPT # ai-forever/mGPT, gpt2 or bert-base-{uncased, cased}
 use_fast_tokenizer: False 

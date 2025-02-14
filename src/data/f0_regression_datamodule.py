@@ -184,9 +184,10 @@ class F0RegressionDataModule(LightningDataModule):
                     self.tokenizer.pad_token_id = self.tokenizer.pad_token_id or self.tokenizer.convert_tokens_to_ids("[PAD]")
                 else:
                     print(f"Using {self.hparams.model_name} tokenizer.")
+                    ## uncomment the line below to use the custom tokenizer for filtering out misaligned tokens
                     # self.tokenizer = CustomBERTTokenizer.from_pretrained(self.hparams.model_name)
+                    ## uncomment the line below to use the original tokenizer
                     self.tokenizer = BertTokenizer.from_pretrained(self.hparams.model_name)
-                    
                     self.tokenizer.pad_token_id = self.tokenizer.pad_token_id or self.tokenizer.convert_tokens_to_ids("[PAD]")
             elif "mGPT" in self.hparams.model_name:
                 if self.hparams.tokenization_by_letter:
@@ -195,8 +196,8 @@ class F0RegressionDataModule(LightningDataModule):
                     self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
                 else:
                     print(f'Using {self.hparams.model_name} tokenizer')
-                    self.tokenizer = CustomGPT2Tokenizer.from_pretrained('ai-forever/mGPT')
-                    # self.tokenizer = GPT2Tokenizer.from_pretrained('ai-forever/mGPT')
+                    # self.tokenizer = CustomGPT2Tokenizer.from_pretrained('ai-forever/mGPT')
+                    self.tokenizer = GPT2Tokenizer.from_pretrained('ai-forever/mGPT')
                     self.tokenizer.pad_token_id = self.tokenizer.eos_token_id
             elif "llama" in self.hparams.model_name:
                 if self.hparams.tokenization_by_letter:
@@ -217,19 +218,38 @@ class F0RegressionDataModule(LightningDataModule):
         self.pad_token_id = self.tokenizer.pad_token_id
         print(f"Dataloader: padding with token id: {self.pad_token_id}")
 
-        (
-            self.train_texts,
-            self.train_durations,
-            self.train_dataset,
-        ) = self.prepare_dataset(self.hparams.train_file)
-        self.val_texts, self.val_durations, self.val_dataset = self.prepare_dataset(
-            self.hparams.val_file
-        )
-        
-        self.test_texts, self.test_durations, self.test_dataset = self.prepare_dataset(
-            self.hparams.test_file
-        )
-        # print("Debug, ", self.test_dataset.__getitem__(0))
+        train_texts, train_durations, train_dataset = self.prepare_dataset(self.hparams.train_file)
+        val_texts, val_durations, val_dataset = self.prepare_dataset(self.hparams.val_file)
+        test_texts, test_durations, test_dataset = self.prepare_dataset(self.hparams.test_file)
+
+        full_dataset = ConcatDataset([train_dataset, val_dataset, test_dataset])
+        full_texts = train_texts + val_texts + test_texts
+        full_durations = train_durations + val_durations + test_durations
+
+        indices = torch.randperm(len(full_dataset)).tolist()
+        # print("Full Dataset Length: ", len(full_dataset))
+
+        train_size = int(self.hparams.train_val_test_split[0] * len(full_dataset))
+        val_size = int(self.hparams.train_val_test_split[1] * len(full_dataset))
+        test_size = len(full_dataset) - train_size - val_size
+
+        train_indices = indices[:train_size]
+        val_indices = indices[train_size:train_size + val_size]
+        test_indices = indices[train_size + val_size:]
+
+        # Create subsets using the shuffled indices
+        self.train_dataset = torch.utils.data.Subset(full_dataset, train_indices)
+        self.val_dataset = torch.utils.data.Subset(full_dataset, val_indices)
+        self.test_dataset = torch.utils.data.Subset(full_dataset, test_indices)
+        # Create subsets train_texts, val_texts, test_texts
+        self.train_texts = [full_texts[i] for i in train_indices]
+        self.val_texts = [full_texts[i] for i in val_indices]
+        self.test_texts = [full_texts[i] for i in test_indices]
+        # Create subsets train_durations, val_durations, test_durations
+        self.train_durations = [full_durations[i] for i in train_indices]
+        self.val_durations = [full_durations[i] for i in val_indices]
+        self.test_durations = [full_durations[i] for i in test_indices]
+
         print(f"Train dataset size: {len(self.train_dataset)}")
         print(f"Validation dataset size: {len(self.val_dataset)}")
         print(f"Test dataset size: {len(self.test_dataset)}")

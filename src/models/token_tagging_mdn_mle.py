@@ -66,7 +66,7 @@ class TokenTaggingMDNMLE(LightningModule):
         tokenization_by_letter: bool = False,
         remove_last_layer: int = 0,
         only_one_letter: bool = False,
-        num_mixtures: int = 50 # Number of mixtures for Mixture Density Network (MDN)
+        num_mixtures: int = 20 # Number of mixtures for Mixture Density Network (MDN)
     ):
         super().__init__()
 
@@ -193,6 +193,8 @@ class TokenTaggingMDNMLE(LightningModule):
     def forward(self, batch: Dict[str, torch.tensor], eps=1e-7, verbose=True):
         batch_size, seq_len = batch["input_ids"].shape
         #print(batch_size, seq_len)
+        # print(f"Dropout active: {self.dropout.training}")
+
         if self.remove_last_layer>0:
             print('not using last layer')
             outputs = self.model(
@@ -348,6 +350,7 @@ class TokenTaggingMDNMLE(LightningModule):
         # torch.cuda.empty_cache()
 
     def validation_step(self, batch: Dict[str, torch.tensor], batch_idx: int):
+        # print(f"Validation Mode: {not self.training}") 
         # loss is batch loss, val_loss tracks it over the epoch
         # loss, preds = self.step(batch)
         (

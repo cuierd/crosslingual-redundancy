@@ -1,0 +1,49 @@
+"model","language","subword_filter","subword_misalignment_ratio","retained_token_ratio","mi_value"
+"mbert","De","All",0.25,1,0.89
+"mbert","De","< 4 subwords",0.21,0.95,0.94
+"mbert","De","< 3 subwords",0.12,0.87,0.95
+"mbert","De","< 2 subwords",0,0.75,1.09
+"mbert","En","All",0.13,1,0.88
+"mbert","En","< 4 subwords",0.12,0.99,0.86
+"mbert","En","< 3 subwords",0.08,0.95,0.9
+"mbert","En","< 2 subwords",0,0.87,0.99
+"mbert","Fr","All",0.19,1,1.23
+"mbert","Fr","< 4 subwords",0.17,0.98,1.15
+"mbert","Fr","< 3 subwords",0.11,0.91,1.23
+"mbert","Fr","< 2 subwords",0,0.81,1.3
+"mbert","It","All",0.24,1,0.86
+"mbert","It","< 4 subwords",0.22,0.98,1.05
+"mbert","It","< 3 subwords",0.14,0.9,1.31
+"mbert","It","< 2 subwords",0,0.76,1.44
+"mbert","Ja","All",0.39,1,1.02
+"mbert","Ja","< 4 subwords",0.37,0.98,1.1
+"mbert","Ja","< 3 subwords",0.33,0.94,1.23
+"mbert","Ja","< 2 subwords",0,0.61,1.86
+"mbert","Sv","All",0.34,1,0.87
+"mbert","Sv","< 4 subwords",0.3,0.96,0.85
+"mbert","Sv","< 3 subwords",0.19,0.85,0.97
+"mbert","Sv","< 2 subwords",0,0.66,1.67
+"mbert","Th","All",0.77,1,1.69
+"mbert","Th","< 4 subwords",0.58,0.81,1.48
+"mbert","Th","< 3 subwords",0.29,0.52,1.67
+"mbert","Th","< 2 subwords",0,0.23,1.75
+"mbert","Vi","All",0.2,1,0.78
+"mbert","Vi","< 4 subwords",0.19,1,0.82
+"mbert","Vi","< 3 subwords",0.17,0.97,1.14
+"mbert","Vi","< 2 subwords",0,0.8,0.85
+"mbert","Zh-CN","All",0.55,1,0.67
+"mbert","Zh-CN","< 4 subwords",0.52,0.97,0.87
+"mbert","Zh-CN","< 3 subwords",0.45,0.89,0.71
+"mbert","Zh-CN","< 2 subwords",0,0.45,1.63
+"mbert","Yue","All",0.26,1,1.07
+"mbert","Yue","< 4 subwords",0.26,1,1.22
+"mbert","Yue","< 3 subwords",0.23,0.97,1.16
+"mbert","Yue","< 2 subwords",0,0.74,0.92
+"mbert","Zh(chr)","All",0,1,1.05
+"mbert","Zh(chr)","< 4 subwords",0,1,1.05
+"mbert","Zh(chr)","< 3 subwords",0,1,1.05
+"mbert","Zh(chr)","< 2 subwords",0,1,1.05
+"mbert","Yue(chr)","All",0,1,1.21
+"mbert","Yue(chr)","< 4 subwords",0,1,1.21
+"mbert","Yue(chr)","< 3 subwords",0,1,1.21
+"mbert","Yue(chr)","< 2 subwords",0,1,1.21

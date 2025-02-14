@@ -1,0 +1,49 @@
+"model","language","subword_filter","subword_misalignment_ratio","retained_token_ratio","mi_value"
+"mgpt","De","All",0.26,1,0.81
+"mgpt","De","< 4 subwords",0.24,0.97,0.8
+"mgpt","De","< 3 subwords",0.16,0.9,0.82
+"mgpt","De","< 2 subwords",0,0.74,1.46
+"mgpt","En","All",0.14,1,0.82
+"mgpt","En","< 4 subwords",0.13,0.99,0.75
+"mgpt","En","< 3 subwords",0.1,0.96,0.85
+"mgpt","En","< 2 subwords",0,0.86,1.27
+"mgpt","Fr","All",0.2,1,1.15
+"mgpt","Fr","< 4 subwords",0.19,0.99,0.78
+"mgpt","Fr","< 3 subwords",0.14,0.94,1.25
+"mgpt","Fr","< 2 subwords",0,0.8,1.61
+"mgpt","It","All",0.27,1,0.65
+"mgpt","It","< 4 subwords",0.26,0.99,0.63
+"mgpt","It","< 3 subwords",0.2,0.93,0.9
+"mgpt","It","< 2 subwords",0,0.73,2.08
+"mgpt","Ja","All",0.62,1,0.8
+"mgpt","Ja","< 4 subwords",0.59,0.97,0.87
+"mgpt","Ja","< 3 subwords",0.44,0.82,0.86
+"mgpt","Ja","< 2 subwords",0,0.38,1.1
+"mgpt","Sv","All",0.63,1,0.93
+"mgpt","Sv","< 4 subwords",0.41,0.79,0.52
+"mgpt","Sv","< 3 subwords",0.3,0.67,0.89
+"mgpt","Sv","< 2 subwords",0,0.37,1.39
+"mgpt","Th","All",0.78,1,1.21
+"mgpt","Th","< 4 subwords",0.63,0.85,1.1
+"mgpt","Th","< 3 subwords",0.28,0.5,1.43
+"mgpt","Th","< 2 subwords",0,0.22,1.56
+"mgpt","Vi","All",0.26,1,0.89
+"mgpt","Vi","< 4 subwords",0.26,1,0.84
+"mgpt","Vi","< 3 subwords",0.24,0.98,0.9
+"mgpt","Vi","< 2 subwords",0,0.74,1.28
+"mgpt","Zh-CN","All",0.77,1,0.63
+"mgpt","Zh-CN","< 4 subwords",0.67,0.9,0.69
+"mgpt","Zh-CN","< 3 subwords",0.46,0.69,0.59
+"mgpt","Zh-CN","< 2 subwords",0,0.23,1.09
+"mgpt","Yue","All",0.81,1,0.98
+"mgpt","Yue","< 4 subwords",0.78,0.97,0.88
+"mgpt","Yue","< 3 subwords",0.47,0.66,0.93
+"mgpt","Yue","< 2 subwords",0,0.19,0.61
+"mgpt","Zh(chr)","All",0.8335,1,0.91
+"mgpt","Zh(chr)","< 4 subwords",0.8335,0.9648,0.84
+"mgpt","Zh(chr)","< 3 subwords",0.7983,0.9648,0.84
+"mgpt","Zh(chr)","< 2 subwords",0,0.1665,0.85
+"mgpt","Yue(chr)","All",0.8227,1,0.74
+"mgpt","Yue(chr)","< 4 subwords",0.8219,0.9992,0.84
+"mgpt","Yue(chr)","< 3 subwords",0.6687,0.846,0.83
+"mgpt","Yue(chr)","< 2 subwords",0,0.1773,0.76

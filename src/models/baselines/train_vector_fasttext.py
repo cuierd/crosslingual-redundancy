@@ -1,0 +1,425 @@
+import logging
+import datetime
+import os
+import torch
+import itertools
+from mlp import MLP
+from datasets import EmbeddingDataset
+from torch.optim import AdamW
+from torch.utils.data import random_split
+from utils import get_embedding_model
+import torch.nn.functional as F
+from tqdm import tqdm
+from torch import nn
+from torch.nn import GaussianNLLLoss
+from torch.distributions import Cauchy
+import argparse
+from torch.distributions import Normal, MultivariateNormal
+import random
+from sklearn.metrics import r2_score
+from transformers import GPT2Model
+from src.utils.torch_utils import (
+    MLPRegressor,
+)
+
+
+DEVICE = "mps" if torch.backends.mps.is_available() else "cpu"
+DEVICE = "cuda" if torch.cuda.is_available() else DEVICE
+
+# WAV_ROOT = "/cluster/work/cotterell/gacampa/vi/wav_files"
+# LAB_ROOT = "/cluster/work/cotterell/gacampa/vi/aligned"
+# PHONEME_LAB_ROOT = "/cluster/work/cotterell/gacampa/vi/aligned"
+# DATA_CACHE = "/cluster/work/cotterell/gacampa/vi/cache"
+
+TRAIN_FILE = "train-clean-100"
+VAL_FILE = "dev-clean"
+TEST_FILE = "test-clean"
+
+# seed everything with 42
+torch.manual_seed(42)
+
+
+def setup_logging(emb_model, data_dir):
+    current_time = datetime.datetime.now().strftime(f"%Y-%m-%d_%H-%M-%S-{emb_model}")
+
+    # Create a new directory for the current log
+    log_dir = os.path.join(data_dir, f"logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+    log_filename = os.path.join(log_dir, f"log_{current_time}.txt")
+    logging.basicConfig(filename=log_filename, level=logging.INFO, format="%(message)s")
+
+
+def print_log(*args, **kwargs):
+    logging.info(*args, **kwargs)
+    print(*args, **kwargs)
+
+
+def step(model, loss_fn, data, labels, num_mix, optimizer=None, eps=1e-7, verbose=False):
+    data, labels = data.to(DEVICE), labels.to(DEVICE)
+    outputs = model(data)
+    # print("outputs shape: ", outputs.shape)
+    # print("labels shape: ", labels.shape)
+    num_components = num_mix
+
+    vector_dim = labels.shape[-1]
+    # print("vector dim ", vector_dim)
+    mu, log_var, pi = torch.split(
+        outputs, 
+        [num_components * vector_dim, num_components * vector_dim, num_components], 
+        dim=-1
+    )  # Split outputs into mu and the flattened lower triangular matrix L_flat
+    # var = torch.nn.functional.softplus(var) + eps
+    # var = torch.exp(log_var) + eps
+    var = torch.exp(torch.clamp(log_var, min=-10, max=10)) + eps
+    pi = torch.softmax(pi, dim=-1)
+    if torch.isnan(pi).any():
+        print("NaN detected in pi after softmax!")
+        pi = torch.full_like(pi, 1 / num_components) 
+
+    mu = mu.view(-1, num_components, vector_dim)  # Shape: (batch_size, num_components, output_dim)
+    var = var.view(-1, num_components, vector_dim)  # Shape: (batch_size, num_components, output_dim)
+    pi = pi.view(-1, num_components, 1)
+
+    labels = labels.unsqueeze(1)
+
+    # print(f"mu shape: {mu.shape}")
+    if verbose:
+        print(f"mu: {mu.shape}: {mu}")
+        print(f"labels: {labels.shape}: {labels}")
+        print(f"var: {var.shape}: {var}")
+        print(f"weight: {pi.shape}: {pi}")
+
+    # cov = torch.diag_embed(var)  # diagonal covariance matrix
+    # dist = Cauchy(mu, var)
+    #print("mu shape: ", mu.shape)
+    # print(labels)
+    dist = Normal(mu, var)
+
+    log_likelihood = dist.log_prob(labels)
+    # print("log_likelihood shape ", log_likelihood.shape)
+    sum_ll = torch.sum(log_likelihood, dim=-1)
+    # print("sum_ll shape ", sum_ll.shape)
+    log_likelihoods = torch.logsumexp(sum_ll + torch.log(pi.squeeze() + eps), dim=-1)
+    # print("log_likelihoods shape ", log_likelihoods.shape)
+
+    # weighted_log_likelihoods = sum_ll + torch.log(pi)
+    loss = -torch.mean(log_likelihoods)
+
+
+    if optimizer is not None:
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+    predicted_mu = torch.sum(mu * pi, dim=1)  # Weighted sum of means
+    labels_squeezed = labels.squeeze(1)  # Shape: (batch_size, output_dim)
+    if verbose:
+        print("shape of label: ", labels.shape)
+        print("shape of label squeezed: ", labels_squeezed.shape)
+
+    mae = F.l1_loss(predicted_mu, labels_squeezed)
+    r2 = r2_score(labels_squeezed.cpu().detach().numpy(), predicted_mu.cpu().detach().numpy())
+
+
+
+    if verbose:
+        print(f"log_likelihood: {loss}")
+        print(f"r2: {r2}")
+        print(f"mae {mae}")
+
+    return loss.item(), mae.item(), r2
+
+
+def train_epoch(model, optimizer, loss_fn, dataloader, num_mix, device, print_log_every=50):
+    model.train()
+    train_loss = 0
+    train_mae = 0
+    train_r2 = 0  # Added R2 score
+    for batch_idx, (data, target) in tqdm(
+        enumerate(dataloader), total=len(dataloader), desc="Training"
+    ):
+        #print(data.shape, target.shape)
+        loss, mae, r2 = step(model, loss_fn, data, target, num_mix, optimizer)  # Added R2 score
+        train_loss += loss
+        train_mae += mae
+        train_r2 += r2  # Added R2 score
+
+        # if batch_idx % print_log_every == 0:
+        #     print(f"Batch {batch_idx} Loss: {loss:.6f}  R2: {r2:.6f}   MAE: {mae:.6f}")
+
+    return (
+        train_loss / len(dataloader),
+        train_mae / len(dataloader),
+        train_r2 / len(dataloader),
+    )  # return average R2 score
+
+
+def validation_epoch(model, loss_fn, dataloader, num_mix, device, print_log_every=400):
+    model.eval()
+    validation_loss = 0
+    validation_mae = 0
+    validation_r2 = 0  # Added R2 score
+    with torch.no_grad():
+        for batch_idx, (data, target) in tqdm(
+            enumerate(dataloader), total=len(dataloader), desc="Validation"
+        ):
+            loss, mae, r2 = step(model, loss_fn, data, target, num_mix)  # Added R2 score
+            validation_loss += loss
+            validation_mae += mae
+            validation_r2 += r2  # Added R2 score
+
+    return (
+        validation_loss / len(dataloader),
+        validation_mae / len(dataloader),
+        validation_r2 / len(dataloader),
+    )  # return average R2 score
+
+
+def train_and_test(
+    args,
+    model,
+    word_model,
+    loss_fn,
+    learning_rate,
+    l2_reg,
+    train_dataloader,
+    val_dataloader,
+    num_mix,
+):
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=learning_rate, weight_decay=l2_reg
+    )
+    device = torch.device(args.DEVICE)
+    # num_mix = args.NUM_MIX
+    model.to(device)
+
+    # Early stopping parameters
+    patience = 2
+    best_val_loss = float("inf")
+    best_model = None
+    wait = 0
+
+    # Train model
+    for epoch in range(args.EPOCHS):
+        print_log("Epoch: {}".format(epoch))
+        train_loss, train_mae, train_r2 = train_epoch(
+            model, optimizer, loss_fn, train_dataloader, num_mix, device
+        )
+        print_log("Epoch: {} \tTraining Loss: {:.6f}".format(epoch, train_loss))
+        print_log("Epoch: {} \tTraining MAE: {:.6f}".format(epoch, train_mae))
+        print_log("Epoch: {} \tTraining R2: {:.6f}".format(epoch, train_r2))
+
+        val_loss, val_mae, val_r2 = validation_epoch(
+            model, loss_fn, val_dataloader, num_mix, device
+        )
+        print_log("Epoch: {} \tValidation Loss: {:.6f}".format(epoch, val_loss))
+        print_log("Epoch: {} \tValidation MAE: {:.6f}".format(epoch, val_mae))
+        print_log("Epoch: {} \tValidation R2: {:.6f}".format(epoch, val_r2))
+
+        # Check if early stopping conditions are met
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_model_wts = model.state_dict()  # Save the model weights
+            wait = 0
+        else:
+            wait += 1
+            if wait >= patience:
+                print_log(
+                    "Early stopping at epoch: {}, best validation loss: {:.6f}".format(
+                        epoch, best_val_loss
+                    )
+                )
+                break
+
+    # Use the model with the best validation loss
+    model.load_state_dict(best_model_wts)
+
+    return best_val_loss, model
+
+
+def main(args):
+    # Generate all combinations of hyperparameters
+    # HYPERPARAMS = {
+    #     "learning_rate": [0.01, 0.001],
+    #     "l2_reg": [0.01, 0.001],
+    #     "dropout": [0.0, 0.1, 0.2, 0.5],
+    #     "num_layers": [3, 5, 10],
+    #     "hidden_units": [512, 1024],
+    # }
+
+    HYPERPARAMS = {
+        "learning_rate": [0.001],
+        "l2_reg": [ 0.001],
+        "dropout": [0.5],
+        "num_layers": [10],
+        "hidden_units": [1024],
+    }
+    all_params = [
+        dict(zip(HYPERPARAMS.keys(), values))
+        for values in itertools.product(*HYPERPARAMS.values())
+    ]
+
+    setup_logging(args.EMB_MODEL, args.DATA_DIR)
+
+    if args.EMB_MODEL == "glove":
+        emb_path = args.GLOVE_PATH
+    elif args.EMB_MODEL == "fasttext":
+        emb_path = args.FASTTEXT_PATH
+        '''    elif args.EMB_MODEL == 'ai-forever/mGPT':
+        emb_path = args.GPT_PATH
+        if os.path.exists(emb_path):
+            print('Embedding model exists at: ', emb_path)
+        else:
+            model = GPT2Model.from_pretrained(args.EMB_MODEL)
+            word_embeddings = model.wte.weight
+            torch.save(word_embeddings, emb_path)'''
+    else:
+        raise ValueError(f"Model {args.EMB_MODEL} not supported.")
+    
+    word_model = get_embedding_model(args.EMB_MODEL, emb_path)
+    device = torch.device(args.DEVICE)
+
+    # loss_fn = GaussianNLLLoss(full=True, eps=1e-5, reduction="mean")
+    loss_fn = None
+
+    best_params = None
+    best_model = None
+    best_val_loss = float("inf")
+
+    # Load data
+    train_dataset = EmbeddingDataset(args.DATA_DIR, "train-clean-100", word_model)
+    val_dataset = EmbeddingDataset(args.DATA_DIR, "dev-clean", word_model)
+
+    # Create data loaders
+    train_dataloader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=args.BATCH_SIZE, shuffle=True
+    )
+    val_dataloader = torch.utils.data.DataLoader(
+        val_dataset, batch_size=args.BATCH_SIZE, shuffle=True
+    )
+
+    # Randomly select a hyperparameter configuration for each run
+    for i in range(args.NUM_RUNS):
+        print(f"\nRun {i+1} out of {args.NUM_RUNS}")
+        params = random.choice(all_params)
+        print_log(f"Training with parameters: {params}")
+
+        # Create model
+        # model = MLP(
+        #     args.INPUT_SIZE,
+        #     params["hidden_units"],
+        #     args.NUM_MIX * (args.OUTPUT_SIZE + 1),
+        #     params["num_layers"],
+        #     params["dropout"],  
+        # )
+
+        if args.USE_MLP:
+            print("Using MLP as head.")
+            model = MLPRegressor(
+                num_layers=params["num_layers"],
+                input_size=args.INPUT_SIZE,
+                hidden_size=params["hidden_units"],
+                num_labels=args.NUM_MIX * (args.OUTPUT_SIZE + 1),
+                dropout_probability=params["dropout"],  
+            )
+        else:
+            print("Using linear layer as head.")
+            model = nn.Linear(
+                params["hidden_units"], args.NUM_MIX * (args.OUTPUT_SIZE + 1),
+            )
+
+        # Train model and get validation loss
+        val_loss, model = train_and_test(
+            args,
+            model,
+            word_model,
+            loss_fn,
+            params["learning_rate"],
+            params["l2_reg"],
+            train_dataloader,
+            val_dataloader,
+            num_mix=args.NUM_MIX,
+        )
+
+        # Update best model and its parameters if validation loss is lower
+        if val_loss < best_val_loss:
+            print(f"New best model configuration with val loss {val_loss}")
+            best_val_loss = val_loss
+            best_model_state_dict = model.state_dict()
+            best_params = params
+
+    # Print the best parameters
+    print_log(f"Best parameters: {best_params}")
+
+    # Create a new model with the best parameters
+    # best_model = MLP(
+    #     args.INPUT_SIZE,
+    #     best_params["hidden_units"],
+    #     args.NUM_MIX * (args.OUTPUT_SIZE + 1),
+    #     best_params["num_layers"],
+    #     best_params["dropout"],
+    # )
+
+    if args.USE_MLP:
+        best_model = MLPRegressor(
+            num_layers=best_params["num_layers"],
+            input_size=args.INPUT_SIZE,
+            hidden_size=best_params["hidden_units"],
+            num_labels=args.NUM_MIX * (args.OUTPUT_SIZE + 1),
+            dropout_probability=best_params["dropout"],  
+        )
+    else:
+        best_model = nn.Linear(
+            best_params["hidden_units"], args.NUM_MIX * (args.OUTPUT_SIZE + 1),
+        )
+
+    # Load the state dictionary of the best model
+    best_model.load_state_dict(best_model_state_dict)
+    best_model.to(device)
+
+    # Load test data
+    test_dataset = EmbeddingDataset(args.DATA_DIR, "test-clean", word_model)
+    test_dataloader = torch.utils.data.DataLoader(
+        test_dataset, batch_size=32, shuffle=True
+    )
+
+    # Test best model
+    test_loss, test_mae, test_r2 = validation_epoch(
+        best_model, loss_fn, test_dataloader, args.NUM_MIX, device
+    )
+    print_log("Test Loss: {:.6f}".format(test_loss))
+    print_log("Test MAE: {:.6f}".format(test_mae))
+    print_log("Test R2: {:.6f}".format(test_r2))
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--NUM_RUNS", default=30, type=int)
+    parser.add_argument("--USE_MLP", default=True, type=bool)
+    parser.add_argument("--INPUT_SIZE", default=300, type=int)
+    parser.add_argument("--DEVICE", default=DEVICE, type=str)
+    parser.add_argument("--NUM_MIX", default=20, type=int)
+    parser.add_argument("--OUTPUT_SIZE", default=2, type=int)
+    parser.add_argument("--EPOCHS", default=50, type=int)
+    parser.add_argument("--BATCH_SIZE", default=4096, type=int)
+    parser.add_argument(
+        "--DATA_DIR",
+        default="/home/user/ding/Projects/Prosody/languages/",
+        type=str,
+    )
+    parser.add_argument(
+        "--GLOVE_PATH",
+        default="/home/user/ding/Projects/Prosody/models/glove/glove.6B.300d.txt",
+        type=str,
+    )
+    parser.add_argument(
+        "--FASTTEXT_PATH",
+        default="/home/user/ding/Projects/Prosody/models/fastText/cc.en.300.bin",
+        type=str,
+    )
+    parser.add_argument("--EMB_MODEL", default="fastText", type=str)
+
+    args = parser.parse_args()
+
+    main(args)

@@ -159,8 +159,9 @@ configs/local/default.yaml
 
 # Directories for dev 
 predictions
-precomputed
-cui
+logs
+languages
+OLD
 
 # Cluster related 
 slurm_log

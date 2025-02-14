@@ -1,0 +1,77 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: f0_regression.yaml
+  - override /model_task: token_tagging_mdn_mle.yaml
+  - override /callbacks: f0_regression.yaml
+  - override /logger: many_loggers.yaml
+  - override /trainer: gpu.yaml
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["mgpt", "f0", "regression","it"]
+
+seed: 12345
+
+logger:
+  wandb:
+    project: mgpt-f0-dct-4-reg
+    entity: cui-ding
+    tags: ["mgpt", "f0", "regression","it"]
+    name: "run-${now:%Y-%m-%d_%H-%M-%S}"
+    group: "mgpt" # Add this line to override the 'group' parameter
+    log_model: False # Add this line to override the 'log_model' parameter
+
+trainer:
+  min_epochs: 1
+  max_epochs: 50
+  gradient_clip_val: 1
+  accumulate_grad_batches: 16
+
+model_task:
+  huggingface_model: ai-forever/mGPT
+  num_labels: 4
+  optimizer:
+    lr: 0.00005
+    weight_decay: 0.1
+  scheduler:
+    patience: 2
+  use_mlp: false 
+  freeze_lm: false
+  train_last_k_layers: 8
+
+callbacks:
+  early_stopping:
+    patience: 3
+
+data:
+  model_name: ai-forever/mGPT
+  batch_size: 16
+  # train_val_test_split: [0.8, 0.1, 0.1]
+  dataset_name: CommonVoice_it
+  data_cache: languages/it/cache
+  lab_root: /home/user/ding/Projects/Prosody/languages/it/aligned
+  phoneme_lab_root: /home/user/ding/Projects/Prosody/languages/it/aligned
+  wav_root: /home/user/ding/Projects/Prosody/languages/it/wav_files
+  train_file: train-clean-100
+  val_file: dev-clean
+  test_file: test-clean
+  score_first_token: false
+  score_last_token: true
+  relative_to_prev: false                                                 
+  # n_prev: 1                                                               
+  relative_to_mean: false 
+  debug: false
+  tokenization_by_letter: false
+
+  f0_mode: dct
+  f0_n_coeffs: 4
+  celex_path: None
+  stress_localizer: None
+
+  num_workers: 64
+  pin_memory: true
